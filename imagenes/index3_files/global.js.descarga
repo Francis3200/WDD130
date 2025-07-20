@@ -1,0 +1,1025 @@
+﻿/**
+ * Javascript to be used sitewide
+ *
+ */
+
+(function ($) {
+  var $window = $(window);
+  var start_Width = window.innerWidth;
+
+  $(document).on("ready", function () {
+    SmoothScrollAnchors();
+    ResponsiveIFRAMES();
+    ResponsiveFlickrEmbed();
+    $(".container").VideoOverlayClick();
+    $(".container-fluid").VideoOverlayClick();
+    VimeoOverlayImage();
+    simpleInfoAccordion();
+    ResponsiveTables();
+    LivestreamBannerSectionInit();
+    loadAudioPlayers();
+    MobileSelects();
+    closeMobileSelects();
+    subsplashDarkMode();
+
+    // // check value of Site Settings > Show Popup and init popup
+    // fetch("/wp-json/isc/v1/fields/popup/")
+    //   .then(function (response) {
+    //     return response.json();
+    //   })
+    //   .then(function (data) {
+    //     if (data == true) {
+    //       initPopup();
+    //     } else if (data != false && data != '[""]') {
+    //       var parsedData = JSON.parse(data);
+    //       var postType = ga_post_type;
+
+    //       if (jQuery.inArray(postType, parsedData) !== -1 && jQuery.inArray("", parsedData) !== 0) {
+    //         initPopup();
+    //       } else if ($("body").hasClass("year_end_popup_active")) {
+    //         initPopup();
+    //       }
+    //     } else if ($("body").hasClass("year_end_popup_active")) {
+    //       initPopup();
+    //     }
+    //   })
+    //   .catch(function (error) {
+    //     console.log(error);
+    //   });
+
+    //this is for bloggers that were using blockquotes before the redesign
+    var blockquoteChangeDate = new Date("2017-11-06");
+    var blogPublishDate = new Date($(".blog_meta_wrapper .article_meta").attr("datetime"));
+    if ($("main").find(".page-blog_wrapper").length != 1 || blogPublishDate > blockquoteChangeDate) {
+      $(".container").ShareBlockquote();
+    } else {
+      $(".container").BloggerOldBlockquote();
+    }
+    //end blockquotes
+
+    RegisterVelocityEffects();
+    animatedDropDowns();
+  });
+  $(window).on("load", function () { });
+  $(window).on("resize", function () {
+    clearTimeout(window.resizedFinished);
+    window.resizedFinished = setTimeout(function () {
+      if (start_Width != window.innerWidth) {
+        //only run if widths change
+        MobileSelects();
+        start_Width = window.innerWidth;
+      }
+      closeMobileSelects();
+    }, 250);
+  });
+
+  $(window)
+    .off("ajax_return_data")
+    .on("ajax_return_data", function () {
+      loadAudioPlayers();
+      simpleInfoAccordion();
+    });
+  window.DoesQueryStringParamExist = function (key) {
+    key = key.replace(/[*+?^$.\[\]{}()|\\\/]/g, "\\$&"); // escape RegEx meta chars
+    var match = location.search.match(new RegExp("[?&]" + key));
+    return match != null;
+  };
+
+  window.GetQueryStringParam = function (key) {
+    key = key.replace(/[*+?^$.\[\]{}()|\\\/]/g, "\\$&"); // escape RegEx meta chars
+    var match = location.search.match(new RegExp("[?&]" + key + "=([^&]+)(&|$)"));
+    return match && decodeURIComponent(match[1].replace(/\+/g, " "));
+  };
+
+  function SmoothScrollAnchors() {
+    // rewritten for Chrome bug NOVEMBER 10, 2017
+    //https://css-tricks.com/snippets/jquery/smooth-scrolling/
+    // Select all links with hashes
+    $('a[href*="#"]')
+      // Remove links that don't actually link to anything
+      .not('[href="#"]')
+      .not('[href="#0"]')
+      .not("[data-toggle]")
+      .not(".coursehash a")
+      .not(".popup-photo")
+      .not(".popup-breakout")
+      .click(function (event) {
+        // Grab height of fixed header
+        var headHeight = $("header").outerHeight();
+        // On-page links
+        if (location.pathname.replace(/^\//, "") == this.pathname.replace(/^\//, "") && location.hostname == this.hostname) {
+          // Figure out element to scroll to
+          var target = $(this.hash);
+          target = target.length ? target : $("[name=" + this.hash.slice(1) + "]");
+          // Does a scroll target exist?
+          if (target.length) {
+            // Only prevent default if animation is actually gonna happen
+            event.preventDefault();
+            $("html, body").animate(
+              {
+                scrollTop: target.offset().top - headHeight,
+              },
+              1000,
+              function () {
+                // Callback after animation
+                if (history.replaceState) {
+                  history.replaceState(null, null, target.selector);
+                } else {
+                  location.hash = target.selector;
+                }
+                // Don't scroll on focus!
+                $.fn.focusNoScroll = function () {
+                  var x = window.scrollX,
+                    y = window.scrollY;
+                  this.focus();
+                  window.scrollTo(x, y);
+                  return this; //chainability
+                };
+                // Must change focus, but don't scroll!
+                var $target = $(target);
+                $target.focusNoScroll();
+                if ($target.is(":focus")) {
+                  // Checking if the target was focused
+                  return false;
+                } else {
+                  $target.attr("tabindex", "-1"); // Adding tabindex for elements not focusable
+                  $target.focusNoScroll(); // Set focus again
+                }
+              }
+            );
+          }
+        }
+      });
+  }
+  //workaround for new Chrome bug with focus
+  $.fn.focusNoScroll = function () {
+    var x = window.scrollX,
+      y = window.scrollY;
+    this.focus();
+    window.scrollTo(x, y);
+    return this;
+  };
+
+  $.fn.VideoOverlayClick = function () {
+    this.each(function () {
+      var video_element = $(this).find(".vid-play-inline");
+      if ($(video_element).length > 0) {
+        $(video_element).each(function () {
+          $(".vid-cover", this).click(function () {
+            $(this).find(".vid-graphic").hide();
+            var embedCode = $(this).find(".vid-code").data("embed");
+            $(this).find(".vid-code").html(embedCode);
+            $(this).find(".vid-code").fitVids();
+            var videoContainer = $(this).find(".vid-code iframe");
+            var videoCode = videoContainer.attr("src");
+            if (videoCode.indexOf("connect.haivision.com") == -1) {
+              if (videoCode.indexOf("?")) {
+                //if (videoCode.search('vimeo.com') > 0) {
+                $(this)
+                  .find("iframe")
+                  .attr("src", $(this).find("iframe").attr("src") + "&autoplay=1&rel=0");
+              } else {
+                $(this)
+                  .find("iframe")
+                  .attr("src", $(this).find("iframe").attr("src") + "?autoplay=1&rel=0");
+              }
+            }
+          });
+        });
+      }
+    });
+  };
+
+  window.VimeoOverlayImage = function () {
+    if ($("span[data-vimeo-id]").length > 0) {
+      $("span[data-vimeo-id]").each(function (index) {
+        var vimeoId = $(this).data("vimeo-id");
+        // Endpoint: https://vimeo.com/api/oembed.json?url=https%3A//vimeo.com/
+        $.getJSON(
+          "https://vimeo.com/api/oembed.json?url=https%3A//vimeo.com/" + vimeoId,
+          {
+            format: "json",
+            width: "960",
+          },
+          function (data) {
+            $("span[data-vimeo-id=" + vimeoId + "]").css({ "background-image": "url(" + data.thumbnail_url + ")" });
+          }
+        );
+      });
+    }
+  };
+
+  $.fn.ShareBlockquote = function () {
+    var quote = "";
+    var url_link;
+    this.each(function () {
+      var blockquote_element = $(this).find("blockquote").not(".twitter-tweet");
+      if ($(blockquote_element).length > 0)
+        $(blockquote_element).each(function () {
+          if ($(this).find(".blockquote-share").length < 1) {
+            quote = $(this).text();
+            var shareHTML =
+              '<div class="blockquote-share">\
+	                                <span class="s-options">\
+		                                <a class="blockquote_tw" data-quote="' +
+              quote +
+              '" href="javascript:void(0);">\
+			                                <i class="fa fa-twitter"></i>\
+		                                </a>\
+                                         <a class="blockquote_fb" data-quote="' +
+              quote +
+              '" href="javascript:void(0);">\
+			                                <i class="fa fa-facebook"></i>\
+		                                </a>\
+	                                </span>\
+                                </div>';
+
+            $(this).append(shareHTML);
+          }
+        });
+    });
+
+    $(".blockquote_fb")
+      .unbind("click")
+      .click(function () {
+        url_link = window.location.href;
+        window.open("http://www.facebook.com/sharer/sharer.php?u=" + url_link + "&quote=" + '"' + $(this).data("quote") + '"', "Share on Facebook", "width=600,height=500,scrollbars=yes,titlebar=no,toolbar=no,location=no,status=no,menubar=no,scrollbars=no");
+      });
+    $(".blockquote_tw")
+      .unbind("click")
+      .click(function () {
+        url_link = window.location.href;
+        quote_text = $(this).data("quote");
+        quote_texts = quote_text.replace(";", " -");
+
+        window.open("http://twitter.com/share?text=" + '"' + quote_texts + '"' + "&url=" + url_link, "Share on Twitter", "width=600,height=500,scrollbars=yes,titlebar=no,toolbar=no,location=no,status=no,menubar=no,scrollbars=no");
+      });
+  };
+
+  $.fn.BloggerOldBlockquote = function () {
+    this.each(function () {
+      var blockquote_element = $(this).find("blockquote").not(".twitter-tweet");
+      if ($(blockquote_element).length > 0)
+        $(blockquote_element).each(function () {
+          $(this).addClass("past_blockquote");
+        });
+    });
+  };
+
+  function RegisterVelocityEffects() {
+    $(".fadeup").velocity("transition.slideUpIn", { stagger: 200, drag: true, duration: 1200 });
+  }
+
+  function simpleInfoAccordion() {
+    $(".accordion-simple")
+      .find(".accordion-toggle")
+      .off("click")
+      .on("click", function () {
+        $(this).next().slideToggle("slow");
+        if ($(this).find(".acc-arrow").hasClass("acc-down-arrow")) {
+          $(this).find(".acc-arrow").removeClass("acc-down-arrow");
+        } else {
+          $(this).find(".acc-arrow").addClass("acc-down-arrow");
+        }
+      });
+  }
+
+  window.ResponsiveTables = function () {
+    if ($(".entry-content table").length > 0) {
+      $(".entry-content table").each(function () {
+        if (!$(this).parent().hasClass("table-responsive")) {
+          $(this).wrap('<div class="table-responsive"></div>');
+        }
+      });
+    }
+  };
+
+  window.ResponsiveIFRAMES = function () {
+    // this fitvids resizes all youtube and vimeo iframes and makes them responsive
+    $(".container").fitVids();
+    $(".container-fluid").fitVids();
+  };
+
+  window.ResponsiveFlickrEmbed = function () {
+    var flickrFrames = $('a[href*="flickr"]:not(.img_caption),a[href*="flickr"] img, img[src*="staticflickr"],a[data-flickr-embed="true"]');
+    if (flickrFrames.length > 0) {
+      $(flickrFrames).each(function (index) {
+        $(this).css({ width: "100%" });
+      });
+    }
+  };
+  window.LivestreamBannerSectionInit = function () {
+    if ($(".livestream_banner_section").length > 0) {
+      $(".livestream_banner_section").velocity("slideDown", { delay: 700, duration: 1000, easing: "easeOutQuart" });
+      $(".livesteam_banner_close").click(function () {
+        $('body').removeClass('livestream_banner_active');
+        $(".livestream_banner_section").velocity("slideUp", { duration: 1000, easing: "easeOutQuart" });
+      });
+    }
+  };
+  window.subsplashDarkMode = function () {
+    var wp_tgc_subsplash_mode = getCookie("wp_tgc_subsplash_mode");
+    if (wp_tgc_subsplash_mode) {
+      $("body").addClass("subsplash_dark_mode");
+    } else {
+      $("body").removeClass("subsplash_dark_mode");
+    }
+  };
+  window.luthernewsletterCallback = function luthernewsletterCallback() {
+    if ($(".luther_newsletter_form").length > 0) {
+      //for each newsletter add the recaptcha and callback if it hasn't been added yet
+      $(".luther_newsletter_form .g-recaptcha:not(.reCaptcha_rendered)").each(function (index, el) {
+        //adding this class to pickup on if it already has reCaptcha enabled
+        $(this).addClass("reCaptcha_rendered");
+        var object = $(this);
+        var object_ID = object.attr("id");
+
+        //this adds the reCaptcha and sets the widget id on each form
+        var widgetId = grecaptcha.render(object.attr("id"), {
+          sitekey: "6LecGD4UAAAAACClySulfNhGtPVGlQXGaY_X8gM9",
+          isolated: true,
+          callback: function (token) {
+            object.parents("form").find(".g-recaptcha-response").val(token);
+            var $form = object.parents("form");
+            var $form_wrapper = $($form).parent(".mc_embed_signup_wrap");
+            $(".mce-success-response", $form_wrapper).hide();
+            $(".mce-error-response", $form_wrapper).hide();
+            mailchimpAPI($form);
+            function mailchimpAPI($form) {
+              $.fn.form = function () {
+                var formData = {};
+                $form.find("[name]").each(function () {
+                  formData[this.name] = this.value;
+                });
+                return formData;
+              };
+
+              var group_ids = [];
+              $(".mch-groups.groups input:checkbox:checked").map(function () {
+                group_ids.push($(this).attr("name"));
+              });
+              var list_ids = [];
+              $(".mch-groups.lists input:checkbox:checked").map(function () {
+                list_ids.push($(this).attr("name"));
+              });
+
+              var email_value = $($form).find('input[name="EMAIL"]').val();
+
+              // var formdata = $form.form();
+              // var has_MCLISTID = formdata.MCLISTID;
+              //if fields are empty stop and show the error message - this is also happening serverside
+              //  if ((group_ids == '' && !has_MCLISTID) || (group_ids == '' && list_ids == '') || email_value == '') {
+              if ((group_ids == "" && list_ids == "") || email_value == "") {
+                $(".mce-error-response", $form_wrapper).show();
+              } else {
+                var $form_widget_id = $(".reCaptcha_rendered", $form_wrapper).attr("data-widget-id");
+                grecaptcha.execute($form_widget_id);
+                $(".btn", $form_wrapper).prop("disabled", true).css({ cursor: "not-allowed" });
+                $.ajax({
+                  url: $form.attr("action"),
+                  type: "POST",
+                  dataType: "json",
+                  data: {
+                    action: "mailchimpsubscribe",
+                    groups: group_ids,
+                    lists: list_ids,
+                    formData: $form.form(),
+                  },
+                  success: function (result) {
+                    if (!result.success) {
+                      $(".mce-error-response", $form_wrapper).show();
+                      $(".mce-success-response", $form_wrapper).hide();
+                    } else {
+                      $(".mce-error-response", $form_wrapper).hide();
+                      $(".mce-success-response", $form_wrapper).show();
+                    }
+                    $(".btn", $form_wrapper).prop("disabled", false).css({ cursor: "pointer" });
+                    grecaptcha.reset($form_widget_id);
+                  },
+                  error: function (result) {
+                    $(".mce-success-response", $form_wrapper).hide();
+                    $(".mce-error-response", $form_wrapper).show();
+
+                    grecaptcha.reset($form_widget_id);
+                  },
+                });
+              }
+            }
+          },
+        });
+        $(this).attr("data-widget-id", widgetId); //adding the widget id
+      });
+    }
+  };
+  window.newsletterCallback = function newsletterCallback() {
+    if ($(".newsletter_signup_form").length > 0) {
+      //for each newsletter add the recaptcha and callback if it hasn't been added yet
+      $(".newsletter_signup_form .g-recaptcha:not(.reCaptcha_rendered)").each(function (index, el) {
+        //adding this class to pickup on if it already has reCaptcha enabled
+        $(this).addClass("reCaptcha_rendered");
+        var object = $(this);
+        var object_ID = object.attr("id");
+
+        //this adds the reCaptcha and sets the widget id on each form
+        var widgetId = grecaptcha.render(object.attr("id"), {
+          sitekey: "6LecGD4UAAAAACClySulfNhGtPVGlQXGaY_X8gM9",
+          isolated: true,
+          callback: function (token) {
+            object.parents("form").find(".g-recaptcha-response").val(token);
+            var $form = object.parents("form");
+            var $form_wrapper = $($form).parent(".stay_up_to_date_form_wrapper");
+
+            mailchimpAPI($form);
+            function mailchimpAPI($form) {
+              $.fn.form = function () {
+                var formData = {};
+                $form.find("[name]").each(function () {
+                  formData[this.name] = this.value;
+                });
+                return formData;
+              };
+
+              var group_ids = [];
+              $(".mch-groups input:checkbox:checked").map(function () {
+                group_ids.push($(this).attr("name"));
+              });
+              var email_value = $($form).find('input[name="EMAIL"]').val();
+
+              var formdata = $form.form();
+              var has_MCLISTID = formdata.MCLISTID;
+              //if fields are empty stop and show the error message - this is also happening serverside
+              if ((group_ids == "" && !has_MCLISTID) || email_value == "") {
+                $(".stay_up_to_date_unsuccess", $form_wrapper).collapse("show");
+              } else {
+                var $form_widget_id = $(".reCaptcha_rendered", $form_wrapper).attr("data-widget-id");
+                grecaptcha.execute($form_widget_id);
+                $(".button", $form_wrapper).prop("disabled", true).css({ cursor: "not-allowed" });
+                $.ajax({
+                  url: $form.attr("action"),
+                  type: "POST",
+                  dataType: "json",
+                  data: {
+                    action: "mailchimpsubscribe",
+                    groups: group_ids,
+                    formData: $form.form(),
+                  },
+                  success: function (result) {
+                    if (!result.success) {
+                      $(".stay_up_to_date_unsuccess", $form_wrapper).html(result.data);
+                      $(".stay_up_to_date_success", $form_wrapper).collapse("hide");
+                      $(".stay_up_to_date_unsuccess", $form_wrapper).collapse("show");
+                    } else {
+                      $(".stay_up_to_date_unsuccess", $form_wrapper).collapse("hide");
+                      $(".stay_up_to_date_success", $form_wrapper).html(result.data);
+                      $(".stay_up_to_date_success", $form_wrapper).collapse("show");
+
+                      // if its a drawer, hide it after 4 seconds and remove it so it doesn't come in again
+                      if ($($form_wrapper).closest(".newsletter_signup_form").hasClass("is_drawer")) {
+                        var newsDrawer = $("body").find(".stay_up_to_date.newsletter_signup_form.is_drawer.come_in");
+                        setTimeout(function () {
+                          $(newsDrawer).hide(400);
+                          setTimeout(function () {
+                            $(newsDrawer).remove();
+                            newsDrawer.length = 0;
+                          }, 1200);
+                        }, 4000);
+                      }
+                    }
+                    $(".button", $form_wrapper).prop("disabled", false).css({ cursor: "pointer" });
+                    grecaptcha.reset($form_widget_id);
+                  },
+                  error: function (result) {
+                    $(".stay_up_to_date_success", $form_wrapper).html(result.data);
+                    $(".stay_up_to_date_success", $form_wrapper).collapse("show");
+
+                    grecaptcha.reset($form_widget_id);
+                  },
+                });
+              }
+            }
+          },
+        });
+        $(this).attr("data-widget-id", widgetId); //adding the widget id
+      });
+
+      $(".newsletter_signup_form .form-control").focus(function () {
+        $(this).parents(".stay_up_to_date_form_wrapper").find(".stay_up_to_date_unsuccess.show").collapse("hide");
+        $(this).parents(".stay_up_to_date_form_wrapper").find(".stay_up_to_date_success.show").collapse("hide");
+      });
+    }
+  };
+  //campaign monitor form submit
+  //https://stackoverflow.com/questions/50405977/how-to-verify-google-recaptcha-v3-response
+  $(".js-cm-form")
+    .off("submit")
+    .on("submit", function (event) {
+      event.preventDefault();
+
+      const formElem = $(this);
+      const callback = formElem.data('iscCallback');
+      const emailField = formElem.find('input[type="email"]');
+      const errorText = $(".mce-error-response").html();
+      const errorElem = formElem.find(".mce-error-response");
+      const successElem = formElem.find(".mce-success-response");
+      const recaptchaAction = formElem.find("[name='action']").val();
+      const isDrawer = formElem.closest(".is_drawer");
+
+      formElem.addClass("disabled");
+
+      if ((formElem.find("input:checkbox").length && !formElem.find("input:checkbox:checked").length) || !emailField.val()) {
+        successElem.hide();
+        errorElem.show();
+        formElem.removeClass("disabled");
+        return;
+      }
+
+      grecaptcha.ready(() => {
+        grecaptcha.execute("6LdvjuIUAAAAAEJrlUeMsNppRpsCOwCAeUy2xWvb", { action: recaptchaAction }).then((token) => {
+          formElem.find('[name="token"]').val(token);
+          $.ajax({
+            url: "https://www.thegospelcoalition.org/wp-content/themes/sage/tgc-ajax.php?action=cmsubscribe",
+            type: "POST",
+            dataType: "json",
+            data: formElem.serialize(),
+            success: (result) => {
+              formElem.removeClass("disabled");
+              errorElem.hide();
+              successElem.show();
+              emailField.val("");
+              if (typeof callback === 'function') {
+                callback();
+              }
+              setTimeout(() => {
+                if (isDrawer) {
+                  $(isDrawer).find(".newsletter_drawer_close").trigger("click");
+                }
+              }, 4000);
+            },
+            error: (result) => {
+              formElem.removeClass("disabled");
+              successElem.hide();
+              errorElem.html(result.responseText.substr(0, result.responseText.indexOf("{")));
+              errorElem.show();
+
+              setTimeout(() => {
+                errorElem.hide();
+                errorElem.html(errorText);
+              }, 4000);
+            },
+          });
+        });
+      });
+
+    });
+
+  function closeMobileSelects() {
+    $(document)
+      .off("click", ".select_closebtn")
+      .on("click", ".select_closebtn", function (e) {
+        e.preventDefault();
+        $("select").select2("close");
+      });
+  }
+  window.MobileSelects = function () {
+    if ($("select.select2-hidden-accessible").length > 0 && $("select").hasClass("select2-hidden-accessible")) {
+      var select2_selects = $("select.select2-hidden-accessible").not(".playback-rate").not(".select2_plain");
+      $(select2_selects).each(function () {
+        //$(this).css({ 'min-width': '100%' });
+
+        var minResSearch = $(this).data("search-limit") != undefined ? $(this).data("search-limit") : 10;
+        $(this).select2("destroy").select2({
+          dropdownCssClass: "custom_select_dd",
+          selectionCssClass: "custom_selection",
+          minimumResultsForSearch: minResSearch,
+        });
+
+        if (window.innerWidth < 768) {
+          //if mobile
+          $(this)
+            .off("select2:open")
+            .on("select2:open", function (e) {
+              $(".select2-container").not(".select2").hide();
+              setTimeout(function () {
+                $(".select2-container").not(".select2").fadeIn(500);
+              }, 200);
+
+              if (!$(".select2-container").not(".select2").hasClass("custom_select_open")) {
+                var labeltxt = $(this).parent().find(".sort_label").text();
+                if (!labeltxt || labeltxt == "") {
+                  labeltxt = $(this).parent().find(".filter-label").text();
+                }
+                if (!labeltxt || labeltxt == "") {
+                  labeltxt = "";
+                }
+                var heading =
+                  '<div class="select_list_header d-flex align-items-center justify-content-between d-md-none">\
+                                             <div class="select_list_header_text">' +
+                  labeltxt +
+                  '</div>\
+                                             <a href="#" class="select_closebtn">×</a>\
+                                           </div>';
+                var checkcontainerExists = setInterval(function () {
+                  if ($(".select2-container").not(".select2").length > 0) {
+                    if (!$(".select2-search").hasClass("select2-search--hide")) {
+                      $(".select2-container").not(".select2").addClass("has_search_field");
+                    }
+                    $(".select2-container").not(".select2").addClass("custom_select_open").prepend(heading);
+                    clearInterval(checkcontainerExists);
+                  }
+                }, 50);
+              }
+            });
+          $(this)
+            .off("select2:closing")
+            .on("select2:closing", function (e) {
+              $("body").find(".select_list_header").remove();
+            });
+          $(this)
+            .off("select2:close")
+            .on("select2:close", function (e) {
+              $(this).select2("destroy").select2({
+                dropdownCssClass: "custom_select_dd",
+                selectionCssClass: "custom_selection",
+                minimumResultsForSearch: 11,
+              });
+            });
+        }
+      });
+    }
+  };
+
+  function initPopup() {
+    //if(!getCookie('yet_popup_closed') && window.location.href.indexOf("donate") == -1){
+    var noYearEndArray = ["donate", "global2022", "global-appeal"];
+    var windowLocation = window.location.href;
+    //debugger;
+    if (!getCookie("yet_popup_closed") && !noYearEndArray.some((substring) => windowLocation.includes(substring))) {
+      var $popup = $("#year-end-takeover");
+      setTimeout(function () {
+        $popup.css("visibility", "visible").fadeTo(1000, 1);
+      }, 2000);
+      $popup.find(".close").click(function () {
+        $popup.hide();
+        setCookie("yet_popup_closed", true, 1);
+      });
+      $popup.find(".yet_button_group a").click(function () {
+        $popup.hide();
+        setCookie("yet_popup_closed", true, 1);
+      });
+    }
+  }
+})(jQuery);
+function animatedDropDowns() {
+  $ = jQuery;
+  if ($(".anim_dropdown").length > 0) {
+    $(".anim_dropdown_btn")
+      .unbind("click")
+      .on("click", function () {
+        var dropdown = $(this).parent().find(".anim_dropdown");
+        if ($(dropdown).is(":visible")) {
+          $(this).parent().removeClass("drop_open");
+          $(dropdown).velocity("slideUp", 500, [250, 30]);
+        } else {
+          $(this).parent().addClass("drop_open");
+          $(dropdown).velocity("slideDown", 1000, [500, 30]);
+        }
+      });
+  }
+}
+function GetGuid() {
+  function s4() {
+    return Math.floor((1 + Math.random()) * 0x10000)
+      .toString(16)
+      .substring(1);
+  }
+  return s4() + s4() + "-" + s4() + "-" + s4() + "-" + s4() + "-" + s4() + s4() + s4();
+}
+var waitForFinalEvent = (function () {
+  var timers = {};
+  return function (callback, ms, uniqueId) {
+    if (!uniqueId) {
+      uniqueId = "Don't call this twice without a uniqueId";
+    }
+    if (timers[uniqueId]) {
+      clearTimeout(timers[uniqueId]);
+    }
+    timers[uniqueId] = setTimeout(callback, ms);
+  };
+})();
+function loadAudioPlayers() {
+  var $ = jQuery;
+
+  // old player
+  var speedDefaults = [
+    {
+      rate: 0.5,
+      title: "Playback Speed 0.5x",
+      label: ".5x",
+    },
+    {
+      rate: 1,
+      title: "Playback Speed 1x",
+      label: "1x",
+    },
+    {
+      rate: 1.5,
+      title: "Playback Speed 1.5x",
+      label: "1.5x",
+    },
+    {
+      rate: 2,
+      title: "Playback Speed 2x",
+      label: "2x",
+    },
+  ];
+  if ($("audio.sitewide_player").length > 0) {
+    //https://github.com/mediaelement/mediaelement/blob/master/docs/api.md#methods
+    $("audio.sitewide_player").mediaelementplayer({
+      features: ["playpause", "current", "progress", "duration", "download"],
+      success: function (mediaElement, domObject, instance) {
+        $(".mejs-playpause-button").addClass("GTM_audio_event_play GTM_sitewide_player");
+        var buttons = '<select class="playback-rate">';
+        for (var i = 0; i < speedDefaults.length; i++) {
+          buttons += '<option class="playback-rate-button"';
+          buttons += speedDefaults[i].rate == 1 ? ' selected="selected"' : "";
+          buttons += ' value="' + speedDefaults[i].rate + '"';
+          buttons += ' title="' + speedDefaults[i].title + '"';
+          buttons += ' aria-label="' + speedDefaults[i].title + '"';
+          buttons += ' tab-index="0">';
+          buttons += speedDefaults[i].label;
+          buttons += "</option>";
+        }
+        buttons += "</select>";
+
+        var $els = $(".mejs-container");
+
+        for (i = 0; i < $els.length; i++) {
+          var audioTag = $($els[i]).find("audio")[0];
+          $(buttons).find(".playback-rate-button").attr("aria-controls", audioTag.id);
+          var $controls = $($els[i]).find(".mejs-controls");
+          if ($controls.length > 0 && $controls.find(".playback-rate").length == 0) {
+            $controls.find(".mejs-time-rail").after(buttons);
+
+            $controls
+              .find(".mejs-time, .mejs-time-rail")
+              .prependTo($controls)
+              .wrapAll('<div class="swp_time_wrapper swp_time_' + audioTag.id + '"/>');
+            $controls.find(".mejs-playpause-button,.playback-rate, .select2").wrapAll('<div class="swp_playback_controls"/>');
+            $controls.find(".mejs-playpause-button").before('<a href="#" class="swp_rewind"></a>').after('<a href="#" class="swp_fastforward"></a>');
+            if (script_vars.postType == "conference_media" || script_vars.is_podcast) {
+              var downloadSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewbox="0 0 11 11"><path id="download" d="M8.8,5.983l-3.3,3.3-3.3-3.3L2.8,5.376,5.07,7.642V0H5.93V7.642L8.2,5.376ZM11,10.141H0V11H11Zm0,0" fill="#fff"></path></svg>';
+              var audioSrc = audioTag.getAttribute("src");
+              $controls.find(".swp_playback_controls").append('<a download href="' + audioSrc + '" class="download-audio">' + downloadSvg + "</a>");
+            }
+          }
+        }
+
+        $(".playback-rate").select2({ minimumResultsForSearch: -1, dropdownCssClass: "playback_speed_drop", closeOnSelect: true });
+
+        $(".sitewide_player + .download").each(function (index, el) {
+          $(this).appendTo($(this).prev().find(".mejs-time-rail"));
+        });
+
+        mediaElement.addEventListener(
+          "ended",
+          function (e) {
+            mediaElement.currentTime = 0;
+            mediaElement.pause();
+            mediaElement.load();
+          },
+          false
+        );
+        mediaElement.addEventListener("playing", function (e) { }, false);
+      },
+    });
+    $("body").on("click", ".swp_rewind", function (e) {
+      e.preventDefault();
+      var selectEl = $(this),
+        audioElm = selectEl.parent().closest(".sitewide_player").find(".mejs-mediaelement").find("audio")[0];
+      audioElm.currentTime -= 15;
+    });
+    $("body").on("click", ".swp_fastforward", function (e) {
+      e.preventDefault();
+      var selectEl = $(this),
+        audioElm = selectEl.parent().closest(".sitewide_player").find(".mejs-mediaelement").find("audio")[0];
+      audioElm.currentTime += 30;
+    });
+
+    $("body").on("change", ".playback-rate", function (e) {
+      var selectEl = $(this),
+        audioElm = selectEl.parent().closest(".sitewide_player").find(".mejs-mediaelement").find("audio")[0],
+        rate = selectEl.val();
+      audioElm.setPlaybackRate(rate);
+    });
+  } else if ($("audio.js-player").length > 0) {
+    //new player
+
+    //var controls = ["progress", "current-time", "duration", "rewind", "play", "fast-forward", "settings", "download"];
+
+    var controls = `
+<div class="plyr__controls flex-column">
+    <div class="plyr__progress w-100">
+        <input data-plyr="seek" type="range" min="0" max="100" step="0.01" value="0" aria-label="Seek">
+        <progress class="plyr__progress__buffer" min="0" max="100" value="0">% buffered</progress>
+        <span role="tooltip" class="plyr__tooltip">00:00</span>
+    </div>
+    <div class="w-100">
+        <div class="d-flex justify-content-between">
+            <div class="plyr__time plyr__time--current" aria-label="Current time"></div>
+            <div class="plyr__time plyr__time--duration" aria-label="Duration"></div>
+        </div>
+    </div>
+    <div class="position-relative d-flex w-100 justify-content-center custom-controls">
+        <button type="button" class="plyr__control" data-plyr="rewind">
+        <img role="presentation" src="https://www.thegospelcoalition.org/wp-content/themes/luther/images/audio-player/rewind.svg" />
+        </button>
+        <button type="button" class="plyr__control" aria-label="Play, {title}" data-plyr="play">
+            <img class="icon--pressed" role="presentation" src="https://www.thegospelcoalition.org/wp-content/themes/luther/images/audio-player/pause-btn.svg"/>
+            <img class="icon--not-pressed" role="presentation" src="https://www.thegospelcoalition.org/wp-content/themes/luther/images/audio-player/play-btn.svg"/>
+        </button>
+        <button type="button" class="plyr__control" data-plyr="fast-forward">
+            <img role="presentation" src="https://www.thegospelcoalition.org/wp-content/themes/luther/images/audio-player/fast-forward.svg" />
+        </button>
+        <div class="position-absolute d-flex h-100 justify-content-end align-items-center speed-download-container">
+            <div class="d-flex speed-download">
+                <select class="playback-rate">
+                    <option title="Playback Rate 0.5x" value="0.5">0.5x</option>
+                    <option title="Playback Rate 1x" value="1" selected>1x</option>
+                    <option title="Playback Rate 1.5x" value="1.5">1.5x</option>
+                    <option title="Playback Rate 2x" value="2">2x</option>
+                </select>
+                <a class="plyr__controls__item plyr__control plyr_download" href="" target="_blank" download="" data-plyr="download"><svg aria-hidden="true" focusable="false"><use xlink:href="#plyr-download"></use></svg><span class="plyr__sr-only">Download</span></a>
+            </div>
+        </div>
+    </div>
+
+</div>
+`;
+
+    function secondsToTime(e) {
+      var h = Math.floor(e / 3600)
+        .toString()
+        .padStart(2, "0"),
+        m = Math.floor((e % 3600) / 60)
+          .toString()
+          .padStart(2, "0"),
+        s = Math.floor(e % 60)
+          .toString()
+          .padStart(2, "0");
+
+      return h + ":" + m + ":" + s;
+    }
+    const player = Plyr.setup(".js-player", {
+      controls: controls,
+      seekTime: 15,
+    });
+    $(".playback-rate").select2({
+      minimumResultsForSearch: -1,
+      dropdownCssClass: "speed-dropdown",
+    });
+    // Expose
+    window.player = player;
+
+    for (var i in player) {
+      player[i].on("play", function (instance) {
+        // pause other players if they are playing
+        var source = instance.detail.plyr.source;
+        for (var x in player) {
+          if (player[x].source != source) {
+            player[x].pause();
+          }
+        }
+      });
+      player[i].on("ready", function (instance) {
+        // fix for duration element not being set on every load
+        var durationEl = $(instance.currentTarget).find(".plyr__time--duration");
+        var duration = instance.detail.plyr.media.duration;
+        var durationText = secondsToTime(duration);
+        if (!durationEl.text()) {
+          durationEl.text(durationText);
+        }
+        instance.detail.plyr.media.playbackRate = 1;
+      });
+    }
+
+    // plyr doesnt allow to set different rewind and fast forward times so add 15 seconds to the fast forward button
+    $('[data-plyr="fast-forward"]')
+      .off("click")
+      .on("click", function () {
+        var audio = $(this).closest(".plyr").find("audio")[0];
+        audio.currentTime += 15;
+      });
+    $(".playback-rate")
+      .off("select2:select")
+      .on("select2:select", function () {
+        var selectEl = $(this);
+        var audioTag = selectEl.closest(".plyr").find("audio")[0];
+        audioTag.playbackRate = selectEl.val();
+      });
+    //add source to download button
+    $(".plyr_download").each(function () {
+      var source = $(this).closest(".plyr").find("audio")[0].currentSrc;
+      $(this).attr("href", source);
+    });
+  } else if ($("audio:not('#conference-media-player')").length > 0) {
+    $("audio").mediaelementplayer({
+      features: ["playpause", "current", "progress", "duration"],
+      success: function (mediaElement, domObject) {
+        $(".mejs-playpause-button").addClass("GTM_audio_event_play");
+        var buttons = '<select class="playback-rate">';
+        for (var i = 0; i < speedDefaults.length; i++) {
+          buttons += '<option class="playback-rate-button"';
+          buttons += speedDefaults[i].rate == 1 ? ' selected="selected"' : "";
+          buttons += ' value="' + speedDefaults[i].rate + '"';
+          buttons += ' title="' + speedDefaults[i].title + '"';
+          buttons += ' aria-label="' + speedDefaults[i].title + '"';
+          buttons += ' tab-index="0">';
+          buttons += speedDefaults[i].label;
+          buttons += "</option>";
+        }
+        buttons += "</select>";
+
+        var $els = $(".mejs-container");
+
+        for (i = 0; i < $els.length; i++) {
+          var audioTag = $($els[i]).find("audio")[0];
+          $(buttons).find(".playback-rate-button").attr("aria-controls", audioTag.id);
+          var $controls = $($els[i]).find(".mejs-controls");
+          if ($controls.length > 0 && $controls.find(".playback-rate").length == 0) {
+            $controls.find(".mejs-time-rail").after(buttons);
+          }
+        }
+        $(".playback-rate").select2({ minimumResultsForSearch: -1 });
+        $(".luther-mejs-container + .download").each(function (index, el) {
+          $(this).appendTo($(this).prev().find(".mejs-time-rail"));
+        });
+        $("body").on("change", ".playback-rate", function () {
+          var selectEl = $(this),
+            audioTag = selectEl.parent().siblings(".mejs-mediaelement").find("audio")[0],
+            rate = selectEl.val();
+          audioTag.setPlaybackRate(rate);
+        });
+        mediaElement.addEventListener("playing", function (e) { }, false);
+      },
+    });
+  }
+}
+
+//https://themergency.com/an-alternative-to-jquerys-getscript-function.html
+jQuery.initLoadScript = function (url, arg1, arg2) {
+  var cache = false,
+    callback = null;
+  //arg1 and arg2 can be interchangable
+  if ($.isFunction(arg1)) {
+    callback = arg1;
+    cache = arg2 || cache;
+  } else {
+    cache = arg1 || cache;
+    callback = arg2 || callback;
+  }
+  var load = true;
+  //check all existing script tags in the page for the url
+  jQuery('script[type="text/javascript"]').each(function () {
+    return (load = url != $(this).attr("src"));
+  });
+  if (load) {
+    //didn't find it in the page, so load it
+    jQuery.ajax({
+      type: "GET",
+      url: url,
+      success: callback,
+      dataType: "script",
+      cache: cache,
+    });
+  } else {
+    //already loaded so just call the callback
+    if (jQuery.isFunction(callback)) {
+      callback.call(this);
+    }
+  }
+};
+
+function setCookie(name, value, days) {
+  var expires = "";
+  if (days) {
+    var date = new Date();
+    date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
+    expires = "; expires=" + date.toUTCString();
+  }
+  document.cookie = name + "=" + (value || "") + expires + "; path=/";
+}
+
+function getCookie(name) {
+  var nameEQ = name + "=";
+  var ca = document.cookie.split(";");
+  for (var i = 0; i < ca.length; i++) {
+    var c = ca[i];
+    while (c.charAt(0) == " ") c = c.substring(1, c.length);
+    if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
+  }
+  return null;
+}
+
+function eraseCookie(name) {
+  document.cookie = name + "=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+}

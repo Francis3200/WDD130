@@ -1,0 +1,822 @@
+var $ = jQuery;
+window.ajaxFancyLoad = [];
+//window.ajaxPost.autoLoad = false;
+//window.ajaxPost.windowLoad = false;
+//window.ajaxPost.container = "";
+//window.ajaxPost.function = "";
+//window.ajaxPost.url = "";
+//window.ajaxPost.title = "";
+//window.ajaxPost.dynamicId = 0;
+//window.ajaxPost.pageCount = 0;
+//window.ajaxPost.posts_per_page;
+//window.ajaxPost.search = "";
+//window.ajaxPost.sort = "";
+//window.isAjaxing = false;
+//window.scroll = {};
+//window.scroll.trigger = "";
+//window.scroll.loader = "";
+//window.scroll.loadmore_btn = "";
+//window.page_before_loadmore_btn = 1;
+var page = 0;
+var dynamicId = 0;
+var isUpdatedPostList = false;
+
+var disqus_shortname = "luthertest";// this sets the disqus shortname globally so it works after ajax load. The variable will change to tgc-articles for production
+var ajaxDataReturn = new CustomEvent("ajax_return_data"); //Generic event fired on ajax success
+//Polyfill for CustomEvents in IEE
+(function () {
+    function CustomEvent(event, params) {
+        params = params || { bubbles: false, cancelable: false, detail: undefined };
+        var evt = document.createEvent('CustomEvent');
+        evt.initCustomEvent(event, params.bubbles, params.cancelable, params.detail);
+        return evt;
+    }
+    CustomEvent.prototype = window.Event.prototype;
+    window.CustomEvent = CustomEvent;
+})();
+
+$(window).on('scroll', function () {
+    ScrollTrigger();
+    PushURLs();
+});
+
+$('.chapter_wrap').on('scroll', function () {
+    ScrollTrigger();
+});
+
+
+document.body.addEventListener("ScrolledToBottom", function () {
+    $.each(window.ajaxFancyLoad, function (i, el) {
+        if (el.autoLoad) {
+            AjaxLoadPosts(el);
+        }
+    });
+
+}, false);
+
+// this loads the next ajax post/posts when the window is first loaded and not just on scroll.
+// this makes it so the user doesn't have to scroll after initial load to fire off more posts
+$(window).on('load', function () {
+    $.each(window.ajaxFancyLoad, function (i, el) {
+        if (el.windowLoad) {
+            AjaxLoadPosts(el);
+        }
+    });
+
+});
+
+// this shows the load more button on page load
+$(window).on('load', function () {
+    $.each(window.ajaxFancyLoad, function (i, el) {
+        if (el.showLoadMoreButton) {
+            $(el.loadmore_btn).addClass('show');
+            LoadMoreClick();
+        }
+    });
+
+});
+
+function AjaxLoadPosts(el) {
+    //If page_before_loadmore_btn is less that window.ajaxPost.pageCount there are window.ajaxPost.pageCount posts loaded and then load more button is added
+    if ((el.hasMorePosts == undefined || el.hasMorePosts) && !el.isAjaxing && el.page_before_loadmore_btn < el.pageCount) {
+
+        var loader = $(el.loader);
+        var loadmore_btn = $(el.loadmore_btn);
+        var ajaxContainer = $(el.container);
+        if (el.page == undefined) {
+            el.page = 0;
+        }
+        el.page++;
+
+        var queryArgs = {
+            action: el.serverSideFunction,
+            post_id: ajaxloadmore.prev_post_id,
+            args: el.args,
+            page: el.page,
+            posts_per_page: el.posts_per_page,
+        };
+        if (window.DoesQueryStringParamExist("debug")) {
+            queryArgs["debug"] = true;
+        }
+        // if (el.serverSideFunction != "article_load_more") {
+        $.ajax({
+            url: '/wp-content/themes/sage/tgc-ajax.php',
+            type: "GET",
+            dataType: "JSON",
+            crossDomain: true,
+            data: queryArgs,
+            beforeSend: function () {
+                el.isAjaxing = true;
+                loader.addClass('show');
+                var ajax_data_send = new CustomEvent("ajax_data_send_" + el.id, {
+                    detail: {
+                        data: 'sending',
+                        page: el.page
+                    }
+                });
+                document.body.dispatchEvent(ajax_data_send);
+            },
+            success: function (result) {
+                if(!result){
+                    return;
+                }
+                //this sets the height for smooth sorting
+                if (isUpdatedPostList) {
+                    $.each(window.ajaxFancyLoad, function (i, el) {
+                        $(el.container).parent().css({ height: 'auto' });
+                    });
+                }
+                //console.log(result);
+                isUpdatedPostList = false;
+                // Update with the previous post ID of the post we're returning
+                ajaxloadmore.prev_post_id = result.data.prev_post_id;
+                // If the last call set 'window.ajaxPost.prevPostID' to 'null' or  empty string, there aren't any more posts left.
+                var has_previous_post = false;
+                if (ajaxloadmore.prev_post_id) {
+                    has_previous_post = true;
+                }
+
+                el.hasMorePosts = has_previous_post;
+                el.page = result.data.page;
+                el.args = result.data.args;
+
+
+                // Place returned html in a variable and add a div for better animation
+                var html = '<div class="new-ajax-content" id="new-ajax-content-' + dynamicId + '" style="opacity: 0;">' + result.data.html + '</div>';
+                // $(ajaxContainer).velocity("transition.slideUpIn", { duration: 0, });
+                $(ajaxContainer).css({ display: "block", opacity: 1 });
+
+                $(html)
+                    .hide()
+                    .appendTo(ajaxContainer)
+                    .slideDown(600, function () {
+                        //Hack #1
+                        if (result.data.featured_image_name != undefined && result.data.featured_image_name != "") {
+                            $('.new-ajax-content img[src*="' + result.data.featured_image_name + '"]').hide();
+                        }
+                        //Hack #2
+                        $('.new-ajax-content a[href*=\"amazon.com\"]:not(.banner_ad_link) img').hide();
+                        $(".new-ajax-content").velocity({ opacity: "1" }, 600);
+                        $(ajaxContainer).velocity("transition.slideUpIn", { duration: 0, });
+                        $(".fadeup", this).velocity("transition.slideUpIn", { stagger: 200, drag: true, duration: 1400, });
+
+                        el.isAjaxing = false;	// Reset 'el.isAjaxing' so we can run the call again
+
+                    });
+
+
+                setTimeout(function () {
+                    loader.removeClass('show');
+                    //rightnow section
+                    //window.UpdateStickyVariables();
+                    if (typeof window.UpdateStickyVariables == 'function') {
+                        window.UpdateStickyVariables();
+                    }
+
+                }, 1500);
+                if (ajaxloadmore.prev_post_id) {
+                    LoadMoreButtonShowHide();
+                }
+
+                // add pagination if pagination_wrap exists 
+                if (el.pagination_wrap) {
+                    CustomPagination(parseInt(result.data.total));
+                }
+
+                window.onAjaxLoad('#new-ajax-content-' + dynamicId); // Re-initialize FitVids, Mediaelement, Functions etc..
+
+                //tell reftagger to display scripture for dynamically loaded content.
+                if (typeof refTagger !== 'undefined') {
+                    refTagger.tag();
+                }
+
+                //Generic event fired on ajax success
+                window.dispatchEvent(ajaxDataReturn);
+
+
+                //Event for triggering CrossRef Tagger
+                window.dispatchEvent(new Event('esv-crossref.trigger-linkify'));
+
+
+                // for resetting Disqus Comments
+                //newpermalink = $(result.data.html).data('article');
+                //newtitle = $(result.data.html).data('article-title');
+                // $.getScript("http://" + disqus_shortname + ".disqus.com/count.js");
+                //var reset = function (newtitle, newpermalink) {
+                //    DISQUS.reset({
+                //        reload: true,
+                //        config: function () {
+                //            this.page.identifier = newtitle;
+                //            this.page.url = newpermalink;
+
+                //        }
+                //    });
+                //};
+
+                dynamicId++;
+                el.page_before_loadmore_btn++;
+
+                var ajax_data_return = new CustomEvent("ajax_data_return_" + el.id, {
+                    detail: {
+                        data: result.data
+                    }
+                });
+                document.body.dispatchEvent(ajax_data_return);
+
+            },
+
+        });
+        // }
+    }
+
+}
+
+function ScrollTrigger() {
+    var $this = $(this);
+    $.each(window.ajaxFancyLoad, function (i, el) {
+        if (el.scrollLoad) {
+            if (el.trigger != undefined && el.trigger != "") {
+                var trigger = $(el.trigger);
+                // Set the threshold and vars for triggering more posts. When 
+                // user is ____ pixels away from the trigger, load more.
+                var threshold = 3000,
+                    tT = trigger.offset().top,
+                    tH = trigger.outerHeight(),
+                    wH = $(window).height(),
+                    wS = $this.scrollTop() + threshold;
+
+                // If we've scrolled to the trigger, and if we're not already 
+                // in the middle of loading more posts, start the process.
+                if (wS > (tT + tH - wH) && el.isAjaxing === false) {
+
+                    var ScrolledToBottom = new CustomEvent("ScrolledToBottom");
+                    document.body.dispatchEvent(ScrolledToBottom);
+                }
+            }
+        }
+    });
+};
+
+function LoadMoreButtonShowHide() {
+
+    $.each(window.ajaxFancyLoad, function (i, el) {
+        //Handles the page count and load more button
+        if (el.page_before_loadmore_btn > (el.pageCount - 2)) {
+            //TODO: Change this timeout to a "wait until element is in dom"
+            setTimeout(function () {
+                $(el.loadmore_btn).addClass('show');
+                LoadMoreClick();
+            }, 1500);
+        } else {
+            $(el.loadmore_btn).removeClass('show');
+        }
+    });
+}
+
+function LoadMoreClick() {
+    $.each(window.ajaxFancyLoad, function (i, el) {
+
+        $(el.loadmore_btn).unbind("click").on("click", function () {
+            $(this).removeClass('show');
+            el.page_before_loadmore_btn = 0;
+            AjaxLoadPosts(el);
+        });
+    });
+};
+
+var prev_total_posts = -1;
+function CustomPagination(total_posts) {
+    $.each(window.ajaxFancyLoad, function (i, el) {
+        if (total_posts != prev_total_posts) {
+            var pagenum = 1;
+            if (getParamByName("page") && getParamByName("page") != 1) {
+                pagenum = getParamByName("page");
+            }
+            var result = Paging(pagenum, el.posts_per_page, total_posts, "page_num", "disabled_link");
+            $(el.pagination_wrap).html(result);
+            prev_total_posts = total_posts;
+            UpdatePageURL();
+        }
+
+        $(el.pagination_wrap).on("click", "a", function () {
+            $("body,html").animate({
+                scrollTop: $(el.container).offset().top - 100
+            },
+                400
+            );
+            var result = Paging($(this).attr("pn"), el.posts_per_page, total_posts, "page_num", "disabled_link");
+            $(el.pagination_wrap).html(result);
+            el.paged = parseInt($(this).attr("pn"));
+            el.paginiation_page = parseInt($(this).attr("pn"));
+            el.paginiation_page_before_loadmore_btn = 0;
+            UpdatePostList(el);
+            UpdatePageURL();
+
+        });
+
+    });
+
+
+    function Paging(PageNumber, PageSize, TotalRecords, ClassName, DisableClassName) {
+        var ReturnValue = "";
+
+        var TotalPages = Math.ceil(TotalRecords / PageSize);
+        if (TotalPages == 1) {
+            return "";
+        }
+        if (+PageNumber > 1) {
+            if (+PageNumber == 2)
+                ReturnValue = ReturnValue + "<a href='javascript:void(0);' pn='" + (+PageNumber - 1) + "' class='" + ClassName + "'><i class='far fa-chevron-left'></i></a>";
+            else {
+                ReturnValue = ReturnValue + "<a href='javascript:void(0);' pn='";
+                ReturnValue = ReturnValue + (+PageNumber - 1) + "' class='" + ClassName + "'><i class='far fa-chevron-left'></i></a>";
+            }
+        }
+        else
+            ReturnValue = ReturnValue + "<span class='" + DisableClassName + "'><i class='far fa-chevron-left'></i></span>";
+        if ((+PageNumber - 2) > 1)
+            ReturnValue = ReturnValue + "<a href='javascript:void(0);' pn='1' class='" + ClassName + "'>1</a> ...";
+        for (var i = +PageNumber - 2; i <= +PageNumber; i++)
+            if (i >= 1) {
+                if (+PageNumber != i) {
+                    ReturnValue = ReturnValue + "<a href='javascript:void(0);' pn='";
+                    ReturnValue = ReturnValue + i + "' class='" + ClassName + "'>" + i + "</a>";
+                }
+                else {
+                    ReturnValue = ReturnValue + "<span class='current_page' pn='" + i + "'>" + i + "</span>";
+                }
+            }
+        for (var i = +PageNumber + 1; i <= +PageNumber + 2; i++)
+            if (i <= TotalPages) {
+                if (+PageNumber != i) {
+                    ReturnValue = ReturnValue + "<a href='javascript:void(0);' pn='";
+                    ReturnValue = ReturnValue + i + "' class='" + ClassName + "'>" + i + "</a>";
+                }
+                else {
+                    ReturnValue = ReturnValue + "<span class='current_page' pn='" + i + "'> " + i + "</span>";
+                }
+            }
+        if ((+PageNumber + 2) < TotalPages) {
+            ReturnValue = ReturnValue + "... <a href='javascript:void(0);' pn='";
+            ReturnValue = ReturnValue + TotalPages + "' class='" + ClassName + "'>" + TotalPages + "</a>";
+        }
+        if (+PageNumber < TotalPages) {
+            ReturnValue = ReturnValue + "   <a href='javascript:void(0);' pn='";
+            ReturnValue = ReturnValue + (+PageNumber + 1) + "' class='" + ClassName + "'><i class='far fa-chevron-right'></i></a>";
+        }
+        else
+            ReturnValue = ReturnValue + "   <span class='" + DisableClassName + "'><i class='far fa-chevron-right'></i></span>";
+
+        return (ReturnValue);
+    }
+
+    function UpdatePageURL() {
+
+        if (parseInt($('.current_page').attr("pn")) == 1 || $('.current_page').attr("pn") == undefined || getParamByName('page') == undefined) {
+            removeParam('page');
+        } else {
+            updateUrl('page', parseInt($('.current_page').attr("pn")));
+        }
+    }
+
+    function getParamByName(name) {
+        name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
+        var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
+            results = regex.exec(location.search);
+        return results === null ? "" : decodeURIComponent(results[1]);
+
+    }
+
+    function updateUrl(key, value) {
+        //Get query string value
+        var searchUrl = decodeURIComponent(location.search);
+        if (searchUrl.indexOf("?") == "-1") {
+            var urlValue = '?' + key + '=' + value;
+            history.pushState({
+                state: 1,
+                rand: Math.random()
+            }, '', urlValue);
+        } else {
+            //Check for key in query string, if not present
+            if (searchUrl.indexOf(key) == "-1") {
+                var urlValue = searchUrl + '&' + key + '=' + value;
+            } else { //If key present in query string
+                var oldValue = getParameterByName(key);
+                if (searchUrl.indexOf("?" + key + "=") != "-1") {
+                    urlValue = searchUrl.replace('?' + key + '=' + oldValue, '?' + key + '=' + value);
+                } else {
+                    urlValue = searchUrl.replace('&' + key + '=' + oldValue, '&' + key + '=' + value);
+                }
+            }
+            history.pushState({
+                state: 1,
+                rand: Math.random()
+            }, '', urlValue);
+        }
+    }
+
+    function removeParam(key) {
+        var urlValue = document.location.href;
+        //Get query string value
+        var searchUrl = location.search;
+
+        if (key != "") {
+            oldValue = getParameterByName(key);
+            removeVal = key + "=" + oldValue;
+            if (key != "job_search") {
+                removeVal = key + "=" + encodeURIComponent(oldValue);
+            }
+            if (searchUrl.indexOf('?' + removeVal + '&') != "-1") {
+                urlValue = urlValue.replace('?' + removeVal + '&', '?');
+            } else if (searchUrl.indexOf('&' + removeVal + '&') != "-1") {
+                urlValue = urlValue.replace('&' + removeVal + '&', '&');
+            } else if (searchUrl.indexOf('?' + removeVal) != "-1") {
+                urlValue = urlValue.replace('?' + removeVal, '');
+            } else if (searchUrl.indexOf('&' + removeVal) != "-1") {
+                urlValue = urlValue.replace('&' + removeVal, '');
+            }
+        } else {
+            var searchUrl = location.search;
+            urlValue = urlValue.replace(searchUrl, '');
+        }
+        history.pushState({
+            state: 1,
+            rand: Math.random()
+        }, '', urlValue);
+    }
+
+};
+
+
+function UpdatePostList(el) {
+
+    //remove load more button
+    $(el.loadmore_btn).removeClass('show');
+    //set height of parent div to inner div to control animation when ajax contents disapear
+    $(el.container).parent().height($(el.container).height());
+    //slide ajax results down and out
+    $(el.container).velocity("transition.slideDownOut", { duration: 300, }).promise().then(function () {
+        //animation on height of parent div so the footer slides up smoothly
+        $(el.container).parent().css({ height: 0, transition: 'height 2s ease', '-webkit-transition': 'height 2s ease', '-moz-transition': 'height 2s ease', '-ms-transition': 'height 2s ease', '-o-transition': 'height 2s ease' });
+        //this timeout resets the parent div height to auto for new ajax contents
+        isUpdatedPostList = true;
+        //setTimeout(function () {
+        //    $(el.container).parent().css({ height: 'auto' });
+        //}, 2000);
+        //reset and reload ajax content and functions
+        $(this).empty().promise().then(function () {
+            el.hasMorePosts = undefined;
+            el.page_before_loadmore_btn = el.paginiation_page_before_loadmore_btn ? el.paginiation_page_before_loadmore_btn : 1;
+            el.page = el.paginiation_page ? el.paginiation_page - 1 : 0;
+            //page = 0;
+            dynamicId = 0;
+            AjaxLoadPosts(el);
+            ScrolledToBottom = new CustomEvent("ScrolledToBottom");
+            document.body.dispatchEvent(ScrolledToBottom);
+        });
+    });
+
+};
+function gaPostData(el) {
+    //Add GA post_data
+    var ga_infinite_scroll_depth;
+    var infiniteScrollDepth = $(el).closest(".new-ajax-content").prop("id");
+    if (infiniteScrollDepth != undefined) {
+        infiniteScrollDepth = parseInt(infiniteScrollDepth.replace('new-ajax-content-', '')) + 1;
+        ga_infinite_scroll_depth = infiniteScrollDepth.toString();
+    } else {
+        ga_infinite_scroll_depth = "";
+    }
+    var ga_post_data;
+    try {
+        if ($(el).data('ga_is_single')) {
+            ga_post_data = gaPostDataString(
+                $(el).data('ga_edition'),
+                $(el).data('ga_post_id'),
+                $(el).data('ga_post_type'),
+                $(el).data('ga_post_author'),
+                $(el).data('ga_post_categories'),
+                $(el).data('ga_post_tags'),
+                $(el).data('ga_post_series'),
+                ga_infinite_scroll_depth,
+                $(el).data('ga_publish_date')
+            );
+        }
+    } catch (e) {
+        console.log(e);
+    }
+    return ga_post_data;
+}
+function gaPostDataSeperated(el) {
+    //Add GA post_data
+    var ga_infinite_scroll_depth;
+    var infiniteScrollDepth = $(el).closest(".new-ajax-content").prop("id");
+    if (infiniteScrollDepth != undefined) {
+        infiniteScrollDepth = parseInt(infiniteScrollDepth.replace('new-ajax-content-', '')) + 1;
+        ga_infinite_scroll_depth = infiniteScrollDepth.toString();
+    } else {
+        ga_infinite_scroll_depth = "";
+    }
+    var ga_post_data,ga_postdata_edition_id,ga_postdata_date_author_type,ga_postdata_category_series,ga_postdata_tags_scrolldepth;
+    try {
+        if ($(el).data('ga_is_single')) {
+            ga_post_data = gaPostDataString(
+                $(el).data('ga_edition'),
+                $(el).data('ga_post_id'),
+                $(el).data('ga_post_type'),
+                $(el).data('ga_post_author'),
+                $(el).data('ga_post_categories'),
+                $(el).data('ga_post_tags'),
+                $(el).data('ga_post_series'),
+                ga_infinite_scroll_depth,
+                $(el).data('ga_publish_date')
+            );
+            ga_postdata_edition_id = gaPostDataString(
+                ga_edition,
+                ga_post_id,
+                '','','','','','',''
+            ).replace("|||||||", "");
+            ga_postdata_date_author_type = gaPostDataString(		
+                ga_publish_date,
+                ga_post_author,			
+                ga_post_type,
+                '','','','','',''				
+            ).replace("||||||", "");
+            ga_postdata_category_series = gaPostDataString(					
+                ga_post_categories,					
+                ga_post_series,	
+                '','','','','','',''				
+            ).replace("|||||||", "");
+            ga_postdata_tags_scrolldepth = gaPostDataString(					
+                ga_post_tags,			
+                ga_infinite_scroll_depth,	
+                '','','','','','',''				
+            ).replace("|||||||", "");
+        }
+    } catch (e) {
+        console.log(e);
+    }
+    return [ga_post_data,ga_postdata_edition_id,ga_postdata_date_author_type,ga_postdata_category_series,ga_postdata_tags_scrolldepth];
+}
+function PushURLs() {
+    var header_height_padded = $('.header_wrapper ').outerHeight() + 50;
+    var windscroll = $(window).scrollTop();
+    if ($('.post_url').length > 0)
+        $('.post_url').each(function () {
+
+            var foundFancyLoadIndex = -1;
+            $.each(window.ajaxFancyLoad, function (i, el) {
+                if (el.should_update_page_meta) {
+                    foundFancyLoadIndex = i;
+                }
+            });
+            //WE found a request that should update the page's meta and url info
+            if (foundFancyLoadIndex > -1) {
+                // return false;
+                window.ajaxFancyLoad[foundFancyLoadIndex].title = $(this).data('post-title');
+                currentIterationUrl = $(this).data('post-url');
+                currentIterationUrl = currentIterationUrl.replace("http://", "https://");
+                var article_pos_top = $(this).offset().top - windscroll;
+                var article_pos_bottom = ($(this).offset().top + $(this).height()) - windscroll;
+                //IF it isn't already the URL in the browser
+                if (window.location.href != currentIterationUrl &&
+                    //If the top of the article is visible and just above or at the height of the header
+                    ((article_pos_top > 0 && article_pos_top <= header_height_padded) ||
+                        //If the bottom of the article is visible and just above or at the height of the header
+                        (article_pos_bottom > 0 && article_pos_bottom <= header_height_padded))) {
+                    //Article is visible...do things
+                    //push new url
+
+                    window.history.pushState('object', window.ajaxFancyLoad[foundFancyLoadIndex].title, currentIterationUrl);
+
+                    // Update meta tags for sharing
+                    window.UpdateMetaData(this);
+
+                    // TODO: ADD GOOGLE TAG ALONG WITH PUSHSTATE SO WE GET A PAGE VIEW WITH THE UPDATED URL
+
+                    window.dataLayer = window.dataLayer || [];
+                    window.dataLayer.push({
+                        'event': 'Pageview',
+                        'page_title' : $(this).data('post-title'),
+                        'url': window.location.pathname,
+                        'post_data': gaPostData(this),
+                        'postdata_edition_id': gaPostDataSeperated(this)[1],
+                        'postdata_date_author_type': gaPostDataSeperated(this)[2],
+                        'postdata_category_series': gaPostDataSeperated(this)[3],
+                        'postdata_tags_scrolldepth': gaPostDataSeperated(this)[4],
+                    });
+                    //ga('set', {
+                    //    page: window.location.pathname,
+                    //    title: window.ajaxFancyLoad[foundFancyLoadIndex].title
+                    //});
+
+                    // ga('send', 'pageview');
+                    //  ga('send', 'pageview', window.location.pathname);
+
+                    //dataLayer.push({
+                    //    'event': 'VirtualPageview',
+                    //    'virtualPageURL':window.location.pathname,
+                    //    'virtualPageTitle': window.ajaxFancyLoad[foundFancyLoadIndex].title
+                    //});
+
+
+                    return false;
+                }
+            }
+
+        });
+
+};
+
+window.onAjaxLoad = function (newContentId) {
+    // For items that should be run on page load, and
+    // on all dynamic content from AJAX calls.
+
+    // If called on dynamic content
+    if (newContentId) {
+        //window.PageTransitions();
+        jQuery(newContentId + " .container").fitVids(); // FitVids
+        jQuery(newContentId + " .row").fitVids(); // FitVids
+
+        if ($('audio:not(.luther-mejs-container):not(.sitewide_player):not(.js-player)').length) {
+
+            // jQuery(newContentId + " audio").mediaelementplayer(); // Mediaelement
+            $(newContentId + " audio").mediaelementplayer({
+                features: ['playpause', 'duration', 'current', 'progress', 'speed'],
+                success: function (mediaElement, domObject) {
+                    $('.mejs-currenttime').addClass("d-none");
+                    $('.mejs-playpause-button').addClass("GTM_audio_event_play");
+                    mediaElement.addEventListener('playing', function (e) {
+                        $('.mejs-duration-container').addClass("d-none");
+                        $('.mejs-currenttime').removeClass("d-none");
+                    }, false);
+                }
+
+            });
+        }
+        if ($('body').hasClass('single-article')) {
+            $(newContentId + ' audio').attr('preload', 'metadata');
+            i = 0;
+            $('.mejs-container:not(.sitewide_player):not(.js-player)').each(function () {
+                src = $(this).find('audio').attr('src');
+                playBtnSvg = '<svg width="26" height="26" class="play_pause paused"><circle class="circle" cx="12.75" cy="12.75" r="12.5" stroke-dasharray="78.5" stroke-dashoffset="0" style="stroke-width:1.5px;"></circle><line id="line1-' + i + '" x1="9.5" y1="7.5" x2="9.5" y2="17.5" style="stroke-width:1.5px;stroke-linecap: round;"></line><path id="line2-' + i + '" d="M 9.5 7.5 L 17.5 12.5 L 9.5 17.5" rx="10" ry="10" style="stroke-width:1.5px;fill:transparent;stroke-linejoin: round;stroke-linecap: round;"><animate attributename="d" dur="300ms" from="M 16.5 7.5 L 16.5 12.5 L 16.5 17.5" to="M 9.5 7.5 L 17.5 12.5 L 9.5 17.5" begin="indefinite" fill="freeze" class="from_pause_to_play"></animate> </path><animate xlink:href="#line2-' + i + '" attributename="d" dur="300ms" from="M 9.5 7.5 L 17.5 12.5 L 9.5 17.5" to="M 16.5 7.5 L 16.5 12.5 L 16.5 17.5" fill="freeze" class="from_play_to_pause" begin="indefinite"></animate></svg>';
+                downloadBtn = '<div class="download"><a href="' + src + '" class="tgc_icon_download p-tb-3" download><span class="bold text-uppercase ml-2" style="font-family: Gotham A, Gotham B; font-weight: 600">' + translate_text.download_audio + '</span></a></div>';
+                if ($(this).parents('.episode_container').length == 0) {
+                    $(this).wrap("<header><div class='episode_container mt-3 p-4'><div class='player'></div></div></header>");
+                    $(this).closest(".player").prepend(playBtnSvg);
+                    $(this).closest(".player").append(downloadBtn);
+                }
+
+                i++;
+            });
+        }
+
+        // For Sharing
+        if (typeof MobileSharePopups == 'function') {
+            MobileSharePopups();
+        }
+        // For Comments
+        if (typeof CommentBtnClick == 'function') {
+            CommentBtnClick();
+        }
+        // For Newsletter Submits
+        if (typeof window.newsletterCallback == 'function') {
+            jQuery(newContentId + " .container").NewsletterDrawerFun(); // For Newsletter Drawer
+            setTimeout(function () {
+                window.newsletterCallback();
+            }, 1000);
+        }
+        if (typeof window.luthernewsletterCallback == 'function') {
+            window.luthernewsletterCallback();
+        }
+
+        // For Podcasts
+        if (typeof PodcastPlayClick == 'function') {
+            PodcastPlayClick();
+        }
+        if (typeof window.podcastPlayers == 'function') {
+            window.podcastPlayers();
+        }
+        if (typeof window.ResponsiveFlickrEmbed == 'function') {
+            window.ResponsiveFlickrEmbed();
+        }
+        //for blockquote sharing
+        //this is for bloggers that were using blockquotes before the redesign
+        // var blockquoteChangeDate = new Date("2017-11-06");
+        // if ($('main').find('.page-blog_wrapper').length != 1 && blockquoteChangeDate < new Date()) {
+        //     jQuery(newContentId + " .container").ShareBlockquote();
+        // } else {
+        //     jQuery(newContentId + " .container").BloggerOldBlockquote();
+        // }
+
+        var blockquoteChangeDate = new Date("2017-11-06");
+        var blogPublishDate = new Date($('.blog_meta_wrapper .article_meta').attr('datetime'));
+        if ($('main').find('.page-blog_wrapper').length != 1 || blogPublishDate > blockquoteChangeDate) {
+            jQuery(newContentId + " .container").ShareBlockquote();
+        } else {
+            jQuery(newContentId + " .container").BloggerOldBlockquote();
+        }
+        //for video overlay clicks
+        jQuery(newContentId + " .container").VideoOverlayClick();
+        jQuery(newContentId + " .row").VideoOverlayClick();
+        //for Vimeo Image Overlays
+        if (typeof window.VimeoOverlayImage == 'function') {
+            window.VimeoOverlayImage();
+        }
+        if (typeof window.ResponsiveTables == 'function') {
+            window.ResponsiveTables();
+        }
+
+        //var adContainer = $("#new-ajax-content-" + newContentId).find(".adContainer");
+        //if (adContainer != undefined)
+        //    LoadNewAd(adContainer.attr('id'), "/21645437283/TGC-6x1-article",false);
+
+        // If called on initial page load
+    }
+    //else {
+    //    window.PageTransitions();
+    //    jQuery(".container").fitVids();
+    //    jQuery('audio').mediaelementplayer();
+    //    // For Comments
+    //    CommentBtnClick();
+    //    // For Podcasts
+    //    PodcastPlayClick();
+    //    window.podcastPlayers();
+    //    window.ResponsiveFlickrEmbed();
+    //    // For filtering/sorting
+    //    SearchPosts();
+    //    SortPosts();
+    //}
+}
+
+window.UpdateMetaData = function (post) {
+
+    var metaPermalink = $(post).data('post-url');
+    var metaTitle = $(post).data('post-title');
+    var metaDescription = $(post).data('post-excerpt');
+    var metaClasses = $("article", post).prop("classList");
+    var metaImageDetails = $(post).data("post-image-details");
+
+
+
+
+
+    $("title").text(metaTitle);
+    $("meta[property='og\\:title']").attr("content", metaTitle);
+    $("meta[property='og\\:description']").attr("content", metaDescription);
+    $("meta[property='og\\:url']").attr("content", metaPermalink);
+    $("link[rel='canonical']").attr("href", metaPermalink);
+    $("meta[name='twitter\\:title']").attr("content", metaTitle);
+    $("meta[name='twitter\\:description']").attr("content", metaDescription);
+    //asdf
+    if (metaImageDetails) {
+        var metaImageURL = metaImageDetails[0];
+        var metaImageWidth = metaImageDetails[1];
+        var metaImageHeight = metaImageDetails[2];
+
+        $("meta[property='og\\:image']").attr("content", metaImageURL);
+        $("meta[property='og\\:image\\:secure_url']").attr("content", metaImageURL);
+        $("meta[property='og\\:image\\:width']").attr("content", metaImageWidth);
+        $("meta[property='og\\:image\\:height']").attr("content", metaImageHeight);
+        $("meta[name='twitter\\:image']").attr("content", metaImageURL);
+
+    }
+    if (metaClasses[1].indexOf('tag') != 0) {
+        $("meta[property='article\\:tag']").remove();
+        $.each(metaClasses, function (index, value) {
+            if (value.match("^tag")) {
+                item = value.replace('tag-', '');
+                if (item.indexOf('-') > -1) {
+                    item = item.replace(/\-+/g, ' ');
+                }
+                $('main').find('meta[property="og\\:site_name"]').after('<meta property="article:tag" content="' + item + '">');
+            }
+        });
+    };
+    if (metaClasses[1].indexOf('category') != 0) {
+        $.each(metaClasses, function (index, value) {
+            if (value.match("^category")) {
+                item = value.replace('category-', '');
+                if (item.indexOf('-') > -1) {
+                    item = item.replace(/\-+/g, ' ');
+                }
+                item = item.substr(0, 1).toUpperCase() + item.substr(1);
+                $("meta[property='article\\:section']").attr("content", item);
+                return false;
+            }
+        });
+    };
+
+}
+
+
+window.LoadNewAd = function (adContainerName, campaign, firstLoad) {
+
+
+}
+
+
+
+
+
+
