@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<link rel="stylesheet" href="index3.css" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ponder Rafting Introduction</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 2rem;
+  }
+  header h1 {
+    color: #2c3e50;
+  }
+  .container {
+    position: relative;
+    max-width: 906px;
+  }
+  img {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .overlay-text {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    color: white;
+    background-color: rgba(0,0,0,0.5);
+    padding: 10px;
+    font-size: 1.5rem;
+  }
+  article {
+    margin-top: 1rem;
+    font-size: 1.2rem;
+    color: #34495e;
+  }
+  footer {
+    margin-top: 3rem;
+    font-size: 0.9rem;
+    color: #7f8c8d;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Ponder Rafting Introduction</h1>
+</header>
+
+<section class="container">
+  <img src="imagenes/index3.jpg" alt="Captador de atención de Typescript" width="906" height="250" />
+  <div class="overlay-text">Las enseñanzas de Jesucristo</div>
+</section>
+
+<article>
+  <p>
+    Explora los rápidos de Ponder y descubre la emoción y la belleza natural que ofrecen estas aguas. ¡Prepárate para una aventura inolvidable!
+  </p>
+</article>
+
+<footer>
+  <p>© 2025 Ponder Rafting. </p>
+</footer>
+
+</body>
+</html>
